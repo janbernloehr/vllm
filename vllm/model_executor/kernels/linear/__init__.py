@@ -120,6 +120,9 @@ from vllm.model_executor.kernels.linear.mxfp8.flashinfer import (
     FlashInferCutlassMxfp8LinearKernel,
     FlashInferTrtllmMxfp8LinearKernel,
 )
+from vllm.model_executor.kernels.linear.mxfp8.flashinfer_bmm import (
+    FlashInferMxfp8BmmLinearKernel,
+)
 from vllm.model_executor.kernels.linear.mxfp8.humming import (
     HummingMxfp8LinearKernel,
 )
@@ -310,6 +313,7 @@ _LINEAR_BACKEND_KERNEL_MAP: dict[str, set[type]] = {
     },
     "flashinfer_cudnn": {
         FlashInferCudnnNvFp4LinearKernel,
+        FlashInferMxfp8BmmLinearKernel,
     },
     "flashinfer_b12x": {
         FlashInferB12xNvFp4LinearKernel,
@@ -958,7 +962,11 @@ def init_mxfp8_linear_kernel(
     possible: list[type[Mxfp8LinearKernel]]
     if bmm_batch_size is not None:
         possible = (
-            [DeepGemmMxfp8BmmLinearKernel, EmulationMxfp8LinearKernel]
+            [
+                DeepGemmMxfp8BmmLinearKernel,
+                FlashInferMxfp8BmmLinearKernel,
+                EmulationMxfp8LinearKernel,
+            ]
             if current_platform.is_cuda()
             else []
         )
@@ -1371,10 +1379,12 @@ __all__ = [
     "MarlinMxFp4LinearKernel",
     "FlashInferCutedslMxfp8LinearKernel",
     "FlashInferCutlassMxfp8LinearKernel",
+    "FlashInferMxfp8BmmLinearKernel",
     "FlashInferTrtllmMxfp8LinearKernel",
     "MarlinMxfp8LinearKernel",
     "XPUMxFp8LinearKernel",
     "TorchMxFp8LinearKernel",
+    "DeepGemmMxfp8BmmLinearKernel",
     "EmulationMxfp8LinearKernel",
     "CutlassNvFp4LinearKernel",
     "EmulationNvFp4LinearKernel",

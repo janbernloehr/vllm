@@ -487,6 +487,28 @@ def has_flashinfer_sparse_mla_sm120_config(num_q_heads: int, top_k: int) -> bool
 
 
 @functools.cache
+def has_flashinfer_bmm_mxfp8() -> bool:
+    """Return ``True`` if FlashInfer's cuDNN ``bmm_mxfp8`` supports this GPU."""
+    if not has_flashinfer() or not current_platform.is_cuda():
+        return False
+    mod = _get_submodule("flashinfer.gemm")
+    bmm_mxfp8 = getattr(mod, "bmm_mxfp8", None) if mod else None
+    if bmm_mxfp8 is None or not hasattr(bmm_mxfp8, "is_backend_supported"):
+        return False
+    capability = current_platform.get_device_capability()
+    if capability is None:
+        return False
+    gemm_base = _get_submodule("flashinfer.gemm.gemm_base")
+    try:
+        return bool(
+            bmm_mxfp8.is_backend_supported("cudnn", capability.to_int())
+            and getattr(gemm_base, "CUDNN_AVAILABLE", False)
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+@functools.cache
 def has_flashinfer_cutedsl() -> bool:
     """Return ``True`` if FlashInfer cutedsl module is available."""
     return (

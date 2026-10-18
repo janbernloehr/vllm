@@ -45,7 +45,11 @@ from vllm.models.deepseek_v41.sparse_mla import (
     FlashMLAMegaAttnBackend,
 )
 from vllm.platforms import current_platform
-from vllm.utils.deep_gemm import fp8_einsum, get_tma_aligned_size
+from vllm.utils.deep_gemm import (
+    fp8_einsum,
+    get_tma_aligned_size,
+    is_deep_gemm_supported,
+)
 from vllm.utils.math_utils import cdiv, round_up
 from vllm.v1.attention.ops.flashmla import is_flashmla_sparse_supported
 from vllm.v1.worker.workspace import current_workspace_manager
@@ -97,6 +101,10 @@ def is_flashmla_mega_attn_supported() -> tuple[bool, str | None]:
         return False, maybe_reason
     if not current_platform.is_device_capability_family(100):
         return False, "FlashMLA mega attention requires sm_10x GPUs."
+    if not is_deep_gemm_supported():
+        # Its wo_a einsum reads the DeepGEMM grouped weight layout, which wo_a
+        # only gets when the DeepGEMM MXFP8 BMM kernel is selected.
+        return False, "FlashMLA mega attention requires DeepGEMM for wo_a."
     if not hasattr(torch.ops._flashmla_C, "fused_norm_rope_attn_rope_cast_decode"):
         return False, "vllm._flashmla_C was built without the mega attention ops."
     if not hasattr(torch.ops._flashmla_C, "permute_q_b_proj"):

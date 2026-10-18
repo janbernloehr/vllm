@@ -5,6 +5,9 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
+from vllm.model_executor.kernels.linear.mxfp8.flashinfer_bmm import (
+    FlashInferMxfp8BmmLinearKernel,
+)
 from vllm.model_executor.layers.fusion.quant_activation import QuantizedActivation
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
     kFp8Dynamic128Sym,
@@ -30,6 +33,17 @@ def compute_fp8_einsum_recipe(
     einsum_recipe = (1, 128, 128) if cap.major <= 9 else (1, 1, block_size)
     tma_aligned_scales = cap.major >= 10
     return einsum_recipe, tma_aligned_scales
+
+
+def uses_flashinfer_mxfp8_bmm(wo_a: nn.Module) -> bool:
+    """Whether ``wo_a`` runs FlashInfer's MXFP8 BMM instead of DeepGEMM.
+
+    That kernel owns its weight layout and activation quantization, so the
+    O projection must hand it a bf16 activation rather than read
+    ``wo_a.weight`` with DeepGEMM's ``fp8_einsum``.
+    """
+    method = getattr(wo_a, "scheme", getattr(wo_a, "quant_method", None))
+    return isinstance(getattr(method, "kernel", None), FlashInferMxfp8BmmLinearKernel)
 
 
 def deep_gemm_fp8_o_proj(
@@ -58,6 +72,24 @@ def deep_gemm_fp8_o_proj(
     kernel, one ``wo_a`` group per slot with the live groups first, so only
     the padding groups are sliced off.
     """
+    if uses_flashinfer_mxfp8_bmm(wo_a):
+        assert not isinstance(o, QuantizedActivation), (
+            "FlashInfer MXFP8 BMM wo_a needs the bf16 attention output."
+        )
+        rotated, _ = fused_inv_rope_fp8_quant(
+            o,
+            positions,
+            cos_sin_cache,
+            n_groups=n_groups,
+            heads_per_group=heads_per_group,
+            nope_dim=nope_dim,
+            rope_dim=rope_dim,
+            quant_group_size=einsum_recipe[2],
+            tma_aligned_scales=tma_aligned_scales,
+            quantize=False,
+        )
+        z = wo_a.quant_method.apply(wo_a, rotated)
+        return wo_b(z.flatten(1))
     use_fp8 = wo_a.weight.dtype == torch.float8_e4m3fn
     if isinstance(o, QuantizedActivation):
         assert use_fp8

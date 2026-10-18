@@ -13,7 +13,10 @@ from vllm.model_executor.layers.fusion.quant_activation import (
     get_input_quant_key,
 )
 from vllm.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
-from vllm.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
+from vllm.models.deepseek_v4.nvidia.ops.o_proj import (
+    deep_gemm_fp8_o_proj,
+    uses_flashinfer_mxfp8_bmm,
+)
 from vllm.platforms import current_platform
 
 
@@ -32,6 +35,8 @@ def _can_fuse_wo_a(layer: nn.Module) -> bool:
     method = getattr(layer.wo_b, "scheme", layer.wo_b.quant_method)
     return (
         current_platform.is_device_capability_family(100)
+        # The fused kernel reads wo_a in DeepGEMM's grouped layout.
+        and not uses_flashinfer_mxfp8_bmm(layer.wo_a)
         # WO-A is FP8 with per-32 scales, and WO-B takes MXFP8 input directly.
         and layer._einsum_recipe == (1, 1, 32)
         and get_input_quant_key(layer.wo_b) == kMxfp8Dynamic

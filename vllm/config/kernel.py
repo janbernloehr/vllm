@@ -369,6 +369,7 @@ class KernelConfig:
       (BF16, NVFP4, MXFP8, W4A16_NVFP4)
     - "flashinfer_trtllm": Use FlashInfer with TensorRT-LLM kernels
     - "flashinfer_cudnn": Use FlashInfer with cuDNN kernels
+      (NVFP4 GEMM, MXFP8 BMM)
     - "flashinfer_b12x": Use FlashInfer b12x CuteDSL NVFP4 GEMM (SM120+)
     - "b12x": Use native B12X FP8 and FP4 linear kernels on SM12x
     - "marlin": Use Marlin kernels
